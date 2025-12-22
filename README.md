@@ -19,7 +19,7 @@ uv run src/train_kuhn.py --iterations 5000 --checkpoint-every 500
 3. Launch the UI:
 
 ```bash
-uv run streamlit run src/streamlit_app.py
+uv run streamlit run src/Kuhn/gemini/app.py
 ```
 
 The UI reads `artifacts/kuhn_cfr.json` by default. Use the sidebar to select a checkpoint and switch between average/current strategies.
