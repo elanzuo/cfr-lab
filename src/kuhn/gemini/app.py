@@ -1,10 +1,13 @@
 import re
+import time
 
 import graphviz
 import streamlit as st
 import streamlit.components.v1 as components
 from cfr_backend import CFRSolver
 from kuhn_poker import KuhnPokerGame
+
+PLAY_DELAY_MS = 300
 
 # --- 1. 页面配置与 CSS 注入 (去除留白) ---
 st.set_page_config(layout="wide", page_title="Kuhn Poker CFR Visualizer")
@@ -65,28 +68,37 @@ def run_training_session(iterations, interval):
     return history
 
 
+def trigger_rerun():
+    st.rerun()
+
+
 # --- 3. 侧边栏布局 (所有的控制都在这里) ---
 with st.sidebar:
-    st.title("♠️ Kuhn CFR")
+    st.title(":material/casino: Kuhn CFR")
 
     # --- A. 训练控制 ---
-    with st.expander("🛠️ 训练配置", expanded=False):
-        total_iterations = st.number_input("总迭代次数", value=1000, step=100)
-        log_interval = st.number_input("记录间隔", value=10, step=10)
+    with st.expander(":material/build: 训练配置", expanded=False):
+        total_iterations = st.number_input("总迭代次数", value=5000, step=500)
+        log_interval = st.number_input("记录间隔", value=100, step=100)
         start_btn = st.button("开始/重新训练", type="primary", use_container_width=True)
 
     # 触发训练
-    if start_btn or "cfr_history" not in st.session_state:
+    training_triggered = start_btn or "cfr_history" not in st.session_state
+    if training_triggered:
         with st.spinner("正在训练..."):
             st.session_state["cfr_history"] = run_training_session(total_iterations, log_interval)
+        st.session_state["is_playing"] = False
+        st.session_state["selected_step_index"] = max(len(st.session_state["cfr_history"]) - 1, 0)
 
     history = st.session_state["cfr_history"]
     steps = [h["step"] for h in history]
+    if training_triggered and steps:
+        st.session_state["step_value"] = steps[st.session_state["selected_step_index"]]
 
     st.divider()
 
     # --- B. 视图控制 ---
-    st.header("👁️ 视图设置")
+    st.header(":material/visibility: 视图设置")
     show_payoff = st.checkbox("显示 Payoff", value=False)
 
     st.divider()
@@ -98,13 +110,64 @@ with st.sidebar:
 title_slot = st.empty()
 
 # --- C. 播放控制 (移到主界面) ---
-st.markdown("#### 🎮 进度回放")
-selected_step_index = st.select_slider(
+st.markdown("#### :material/gamepad: 进度回放")
+
+if "is_playing" not in st.session_state:
+    st.session_state["is_playing"] = False
+if "selected_step_index" not in st.session_state:
+    st.session_state["selected_step_index"] = len(steps) - 1
+if "step_value" not in st.session_state:
+    st.session_state["step_value"] = steps[st.session_state["selected_step_index"]] if steps else 0
+
+max_step_index = max(len(steps) - 1, 0)
+if st.session_state["selected_step_index"] > max_step_index:
+    st.session_state["selected_step_index"] = max_step_index
+    st.session_state["step_value"] = steps[max_step_index] if steps else 0
+
+step_to_index = {step: idx for idx, step in enumerate(steps)}
+if st.session_state["step_value"] not in step_to_index and steps:
+    st.session_state["step_value"] = steps[st.session_state["selected_step_index"]]
+
+# 优化布局：使用 3 列按钮 + 1 个占位列
+play_col, pause_col, reset_col, _ = st.columns([0.8, 0.8, 0.8, 4.6], vertical_alignment="center")
+
+play_clicked = play_col.button("播放", icon=":material/play_arrow:", use_container_width=True)
+pause_clicked = pause_col.button("暂停", icon=":material/pause:", use_container_width=True)
+reset_clicked = reset_col.button("重置", icon=":material/restart_alt:", use_container_width=True)
+
+if play_clicked:
+    st.session_state["is_playing"] = True
+    st.session_state["selected_step_index"] = 0
+    st.session_state["step_value"] = steps[0] if steps else 0
+if pause_clicked:
+    st.session_state["is_playing"] = False
+if reset_clicked:
+    st.session_state["selected_step_index"] = 0
+    st.session_state["step_value"] = steps[0] if steps else 0
+
+should_autoplay = False
+if st.session_state["is_playing"]:
+    next_index = st.session_state["selected_step_index"] + 1
+    if next_index > max_step_index:
+        st.session_state["selected_step_index"] = max_step_index
+        st.session_state["step_value"] = steps[max_step_index] if steps else 0
+        st.session_state["is_playing"] = False
+    else:
+        st.session_state["selected_step_index"] = next_index
+        st.session_state["step_value"] = steps[next_index]
+    should_autoplay = st.session_state["is_playing"]
+
+selected_step_value = st.select_slider(
     "选择 Iteration:",
-    options=range(len(steps)),
-    format_func=lambda x: f"{steps[x]}",
-    value=len(steps) - 1,
+    options=steps,
+    key="step_value",
+    disabled=st.session_state["is_playing"],
 )
+st.caption("提示：播放按“记录间隔”的快照推进，若想逐步观察可把记录间隔设为 1。")
+
+selected_step_index = step_to_index.get(selected_step_value, 0)
+st.session_state["selected_step_index"] = selected_step_index
+
 current_snapshot = history[selected_step_index]["data"]
 current_step = steps[selected_step_index]
 
@@ -112,7 +175,7 @@ current_step = steps[selected_step_index]
 title_slot.subheader(f"博弈树可视化 (Iteration {current_step})")
 
 # --- D. 关键指标监控 (移到主界面) ---
-st.markdown("#### 📊 关键指标")
+st.markdown("#### :material/bar_chart: 关键指标")
 
 
 # 数据提取辅助
@@ -152,6 +215,8 @@ def render_game_tree_svg(game, snapshot_data, show_payoff=True):
         width = "1.2"
         height = "0.8"
         style = "filled"
+        node_data = None
+        tooltip = None
 
         if state.is_terminal():
             if not show_payoff:
@@ -189,6 +254,19 @@ def render_game_tree_svg(game, snapshot_data, show_payoff=True):
 
             if node_data:
                 avg_strat = node_data["avg_strategy"]
+                regret = node_data.get("regret")
+                current_strat = node_data.get("current_strategy")
+                # SVG tooltip: 显示完整策略与后悔值，便于悬浮查看
+                tooltip_lines = [
+                    f"avg_strategy: [{avg_strat[0]:.3f}, {avg_strat[1]:.3f}]",
+                ]
+                if regret is not None:
+                    tooltip_lines.append(f"regret: [{regret[0]:.3f}, {regret[1]:.3f}]")
+                if current_strat is not None:
+                    tooltip_lines.append(
+                        f"current_strategy: [{current_strat[0]:.3f}, {current_strat[1]:.3f}]"
+                    )
+                tooltip = "\n".join(tooltip_lines)
                 label = (
                     f'<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">'
                     f"<TR><TD><B>P{player} ({info_set})</B></TD></TR>"
@@ -210,6 +288,10 @@ def render_game_tree_svg(game, snapshot_data, show_payoff=True):
             width=width,
             height=height,
         )
+        if node_data and tooltip:
+            node_kwargs["tooltip"] = tooltip
+            # 设置 URL 以确保浏览器对 tooltip 生效（生成可悬浮的 <a>） -> 移除 URL，直接利用 SVG <title>
+            # node_kwargs["URL"] = "#"
         if state.is_terminal():
             node_kwargs["fixedsize"] = fixedsize
         dot.node(node_id, label, **node_kwargs)
@@ -258,21 +340,68 @@ def make_svg_responsive(svg_text: str) -> str:
     )
 
 
-# 渲染 SVG
-svg_content = make_svg_responsive(
-    render_game_tree_svg(
-        KuhnPokerGame(),
-        current_snapshot,
-        show_payoff=show_payoff,
-    )
-)
+def fix_svg_tooltips(svg_text: str) -> str:
+    """
+    Ensure SVG tooltips are correctly rendered by browsers.
+    Graphviz sometimes puts tooltips in `xlink:title` attributes.
+    This function converts them to standard <title> child elements.
+    """
+    # Pattern to match elements with xlink:title attribute
+    # We capture the tag start, the title content, and the rest of the tag
+    # Example: <polygon ... xlink:title="mytitle" ... >
+    # This is a bit simplistic but works for standard Graphviz output.
+    
+    # However, Graphviz for nodes without URL usually generates:
+    # <g><title>...</title>...</g>
+    # So this function is mainly a backup.
+    
+    # If we do find xlink:title, we try to inject <title> content.
+    # But for a robust regex replacement on arbitrary tags without parsing XML, it's tricky.
+    # Given we removed URL="#", Graphviz should produce <title> elements natively.
+    # We will keep a simple version that just looks for the specific pattern if it occurs.
+    
+    if "xlink:title" not in svg_text:
+        return svg_text
+        
+    # Regex to move xlink:title="X" into <title>X</title> inside the tag is complex because
+    # we need to know where the tag closes.
+    # Let's trust that removing URL="#" is sufficient for Graphviz to generate <title>.
+    # If not, we might need a more complex parser. 
+    # For now, let's revert to a simpler pass-through or a basic fix if needed.
+    
+    # Let's try to handle the case where it might be on a <g> or other element.
+    # <g id="node1" class="node" xlink:title="tooltip">
+    
+    def repl(match):
+        start = match.group(1)
+        title = match.group(2)
+        end = match.group(3)
+        # Remove xlink:title from the tag attributes to avoid redundancy/issues
+        clean_start = re.sub(r'\s*xlink:title="[^"]+"', "", start)
+        return f"{clean_start}{end}<title>{title}</title>"
 
-# --- 5. SVG 容器 (自适应缩放，避免横向裁切) ---
+    # Matches: (<tag ... ) xlink:title="(...)" ( ... >)
+    # Note: This expects the tag to be self-closing or opening. 
+    # If it's opening, <title> will be the first child.
+    pattern = r'(<[^>]+)\s+xlink:title="([^"]+)"([^>]*>)'
+    return re.sub(pattern, repl, svg_text)
+
+
+# 渲染 SVG
+svg_content = render_game_tree_svg(
+    KuhnPokerGame(),
+    current_snapshot,
+    show_payoff=show_payoff,
+)
+svg_content = fix_svg_tooltips(svg_content)
+svg_content = make_svg_responsive(svg_content)
+
+# --- 5. SVG 容器 (改为 st.markdown 直接渲染以避免 iframe 闪烁) ---
 html_container = f"""
 <style>
     .tree-wrapper {{
         width: 100%;
-        height: 100%;
+        height: 820px;
         overflow: hidden;
         border: 1px solid #e0e0e0;
         border-radius: 5px;
@@ -290,36 +419,13 @@ html_container = f"""
         height: 100%;
     }}
 </style>
-<div style="
-    width: 100%;
-    height: 100%;
-" class="tree-wrapper">
+<div class="tree-wrapper">
     {svg_content}
 </div>
-<script>
-    (function () {{
-        const wrapper = document.querySelector('.tree-wrapper');
-        const svg = document.getElementById('game-tree-svg');
-        if (!wrapper || !svg) return;
-
-        function fit() {{
-            const g = svg.querySelector('g');
-            if (!g) return;
-            const bbox = g.getBBox();
-            if (!bbox || !bbox.width || !bbox.height) return;
-            svg.setAttribute(
-                'viewBox',
-                `${{bbox.x}} ${{bbox.y}} ${{bbox.width}} ${{bbox.height}}`
-            );
-            svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-            svg.style.width = '100%';
-            svg.style.height = '100%';
-        }}
-
-        requestAnimationFrame(fit);
-        window.addEventListener('resize', fit);
-    }})();
-</script>
 """
 
-components.html(html_container, height=820, scrolling=False)  # iframe 高度与容器同步
+st.markdown(html_container, unsafe_allow_html=True)
+
+if should_autoplay:
+    time.sleep(PLAY_DELAY_MS / 1000)
+    trigger_rerun()
