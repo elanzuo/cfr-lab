@@ -195,6 +195,23 @@ s_1b = get_strat("1b")
 c4.metric("P1 Card1 (Fold)", f"{s_1b[0]:.2f}", delta_color="off")
 
 
+# 纳什均衡理论值参考
+NASH_INFO = {
+    "0": "Nash Bet: [0.00, 0.33] (alpha)",
+    "1": "Nash Pass: 100%",
+    "2": "Nash Bet: 3 * alpha",
+    "0p": "Nash Bet: 33.3%",
+    "1p": "Nash Pass: 100%",
+    "2p": "Nash Bet: 100%",
+    "0b": "Nash Fold: 100%",
+    "1b": "Nash Call: 33.3%",
+    "2b": "Nash Call: 100%",
+    "0pb": "Nash Fold: 100%",
+    "1pb": "Nash Call: alpha + 33.3%",
+    "2pb": "Nash Call: 100%",
+}
+
+
 # 绘图逻辑
 def render_game_tree_svg(game, snapshot_data, show_payoff=True):
     dot = graphviz.Digraph(comment="Kuhn Poker")
@@ -256,10 +273,16 @@ def render_game_tree_svg(game, snapshot_data, show_payoff=True):
                 avg_strat = node_data["avg_strategy"]
                 regret = node_data.get("regret")
                 current_strat = node_data.get("current_strategy")
+
                 # SVG tooltip: 显示完整策略与后悔值，便于悬浮查看
                 tooltip_lines = [
                     f"avg_strategy: [{avg_strat[0]:.3f}, {avg_strat[1]:.3f}]",
                 ]
+
+                nash_desc = NASH_INFO.get(info_set)
+                if nash_desc:
+                    tooltip_lines.append(nash_desc)
+
                 if regret is not None:
                     tooltip_lines.append(f"regret: [{regret[0]:.3f}, {regret[1]:.3f}]")
                 if current_strat is not None:
@@ -340,60 +363,12 @@ def make_svg_responsive(svg_text: str) -> str:
     )
 
 
-def fix_svg_tooltips(svg_text: str) -> str:
-    """
-    Ensure SVG tooltips are correctly rendered by browsers.
-    Graphviz sometimes puts tooltips in `xlink:title` attributes.
-    This function converts them to standard <title> child elements.
-    """
-    # Pattern to match elements with xlink:title attribute
-    # We capture the tag start, the title content, and the rest of the tag
-    # Example: <polygon ... xlink:title="mytitle" ... >
-    # This is a bit simplistic but works for standard Graphviz output.
-    
-    # However, Graphviz for nodes without URL usually generates:
-    # <g><title>...</title>...</g>
-    # So this function is mainly a backup.
-    
-    # If we do find xlink:title, we try to inject <title> content.
-    # But for a robust regex replacement on arbitrary tags without parsing XML, it's tricky.
-    # Given we removed URL="#", Graphviz should produce <title> elements natively.
-    # We will keep a simple version that just looks for the specific pattern if it occurs.
-    
-    if "xlink:title" not in svg_text:
-        return svg_text
-        
-    # Regex to move xlink:title="X" into <title>X</title> inside the tag is complex because
-    # we need to know where the tag closes.
-    # Let's trust that removing URL="#" is sufficient for Graphviz to generate <title>.
-    # If not, we might need a more complex parser. 
-    # For now, let's revert to a simpler pass-through or a basic fix if needed.
-    
-    # Let's try to handle the case where it might be on a <g> or other element.
-    # <g id="node1" class="node" xlink:title="tooltip">
-    
-    def repl(match):
-        start = match.group(1)
-        title = match.group(2)
-        end = match.group(3)
-        # Remove xlink:title from the tag attributes to avoid redundancy/issues
-        clean_start = re.sub(r'\s*xlink:title="[^"]+"', "", start)
-        return f"{clean_start}{end}<title>{title}</title>"
-
-    # Matches: (<tag ... ) xlink:title="(...)" ( ... >)
-    # Note: This expects the tag to be self-closing or opening. 
-    # If it's opening, <title> will be the first child.
-    pattern = r'(<[^>]+)\s+xlink:title="([^"]+)"([^>]*>)'
-    return re.sub(pattern, repl, svg_text)
-
-
 # 渲染 SVG
 svg_content = render_game_tree_svg(
     KuhnPokerGame(),
     current_snapshot,
     show_payoff=show_payoff,
 )
-svg_content = fix_svg_tooltips(svg_content)
 svg_content = make_svg_responsive(svg_content)
 
 # --- 5. SVG 容器 (改为 st.markdown 直接渲染以避免 iframe 闪烁) ---

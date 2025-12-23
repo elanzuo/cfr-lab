@@ -14,6 +14,15 @@
 
 基于 Kuhn Poker 的 CFR（Counterfactual Regret Minimization）算法可视化工具，用于理解 CFR 如何收敛到纳什均衡，Vibe coding by GPT-5.2.
 
+### 开发命令
+
+使用 UV 进行依赖管理和项目执行：
+
+- `uv sync` — 安装依赖
+- `uv run python <module>` — 运行 Python 模块
+- `uv run pytest` — 运行测试套件
+- `uv add <package>` — 添加依赖
+
 ### Python 规范工具链
 
 - `uvx basedpyright .`: 静态类型检查
