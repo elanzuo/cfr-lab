@@ -16,19 +16,19 @@ st.set_page_config(layout="wide", page_title="Kuhn Poker CFR Visualizer")
 st.markdown(
     """
     <style>
-        /* 移除顶部巨额 padding */
+        /* Reduce top padding */
         .block-container {
             padding-top: 0.4rem !important;
             padding-bottom: 0rem !important;
             padding-left: 1rem !important;
             padding-right: 1rem !important;
         }
-        /* 调整标题大小 */
+        /* Adjust title size */
         h1 {
             font-size: 1.8rem !important;
             margin-bottom: 0.5rem !important;
         }
-        /* 紧凑主区块间距 */
+        /* Tighten main section spacing */
         .stMarkdown h4 {
             margin: 0.3rem 0 0.2rem 0 !important;
         }
@@ -39,7 +39,7 @@ st.markdown(
         [data-testid="stMetric"] {
             padding: 0.2rem 0.4rem !important;
         }
-        /* 隐藏掉 Streamlit 默认的汉堡菜单和 footer 以争取更多空间 (可选) */
+        /* Hide Streamlit default menu and footer to save space (optional) */
         #MainMenu {visibility: hidden;}
         header {visibility: hidden;}
         footer {visibility: hidden;}
@@ -77,15 +77,15 @@ with st.sidebar:
     st.title(":material/casino: Kuhn CFR")
 
     # --- A. 训练控制 ---
-    with st.expander(":material/build: 训练配置", expanded=False):
-        total_iterations = st.number_input("总迭代次数", value=5000, step=500)
-        log_interval = st.number_input("记录间隔", value=100, step=100)
-        start_btn = st.button("开始/重新训练", type="primary", use_container_width=True)
+    with st.expander(":material/build: Training Settings", expanded=False):
+        total_iterations = st.number_input("Total iterations", value=5000, step=500)
+        log_interval = st.number_input("Snapshot interval", value=100, step=100)
+        start_btn = st.button("Start / Retrain", type="primary", use_container_width=True)
 
     # 触发训练
     training_triggered = start_btn or "cfr_history" not in st.session_state
     if training_triggered:
-        with st.spinner("正在训练..."):
+        with st.spinner("Training..."):
             st.session_state["cfr_history"] = run_training_session(total_iterations, log_interval)
         st.session_state["is_playing"] = False
         st.session_state["selected_step_index"] = max(len(st.session_state["cfr_history"]) - 1, 0)
@@ -98,8 +98,8 @@ with st.sidebar:
     st.divider()
 
     # --- B. 视图控制 ---
-    st.header(":material/visibility: 视图设置")
-    show_payoff = st.checkbox("显示 Payoff", value=False)
+    st.header(":material/visibility: View Settings")
+    show_payoff = st.checkbox("Show Payoff", value=False)
 
     st.divider()
 
@@ -110,7 +110,7 @@ with st.sidebar:
 title_slot = st.empty()
 
 # --- C. 播放控制 (移到主界面) ---
-st.markdown("#### :material/gamepad: 进度回放")
+st.markdown("#### :material/gamepad: Playback")
 
 if "is_playing" not in st.session_state:
     st.session_state["is_playing"] = False
@@ -131,9 +131,9 @@ if st.session_state["step_value"] not in step_to_index and steps:
 # 优化布局：使用 3 列按钮 + 1 个占位列
 play_col, pause_col, reset_col, _ = st.columns([0.8, 0.8, 0.8, 4.6], vertical_alignment="center")
 
-play_clicked = play_col.button("播放", icon=":material/play_arrow:", use_container_width=True)
-pause_clicked = pause_col.button("暂停", icon=":material/pause:", use_container_width=True)
-reset_clicked = reset_col.button("重置", icon=":material/restart_alt:", use_container_width=True)
+play_clicked = play_col.button("Play", icon=":material/play_arrow:", use_container_width=True)
+pause_clicked = pause_col.button("Pause", icon=":material/pause:", use_container_width=True)
+reset_clicked = reset_col.button("Reset", icon=":material/restart_alt:", use_container_width=True)
 
 if play_clicked:
     st.session_state["is_playing"] = True
@@ -158,12 +158,14 @@ if st.session_state["is_playing"]:
     should_autoplay = st.session_state["is_playing"]
 
 selected_step_value = st.select_slider(
-    "选择 Iteration:",
+    "Select Iteration:",
     options=steps,
     key="step_value",
     disabled=st.session_state["is_playing"],
 )
-st.caption("提示：播放按“记录间隔”的快照推进，若想逐步观察可把记录间隔设为 1。")
+st.caption(
+    "Tip: Playback advances by snapshots at the interval; set the interval to 1 for step-by-step."
+)
 
 selected_step_index = step_to_index.get(selected_step_value, 0)
 st.session_state["selected_step_index"] = selected_step_index
@@ -172,10 +174,10 @@ current_snapshot = history[selected_step_index]["data"]
 current_step = steps[selected_step_index]
 
 # 现在更新标题（位置在上方占位处）
-title_slot.subheader(f"博弈树可视化 (Iteration {current_step})")
+title_slot.subheader(f"Game Tree Visualization (Iteration {current_step})")
 
 # --- D. 关键指标监控 (移到主界面) ---
-st.markdown("#### :material/bar_chart: 关键指标")
+st.markdown("#### :material/bar_chart: Key Metrics")
 
 
 # 数据提取辅助
@@ -186,9 +188,9 @@ def get_strat(infoset):
 # 单行布局展示 4 个指标
 c1, c2, c3, c4 = st.columns(4)
 s_0 = get_strat("0")
-c1.metric("P0 Card0 (Bet)", f"{s_0[1]:.2f}", delta_color="off", help="诈唬概率 (Bluff)")
+c1.metric("P0 Card0 (Bet)", f"{s_0[1]:.2f}", delta_color="off", help="Bluff rate")
 s_2pb = get_strat("2pb")
-c2.metric("P0 Card2 (Call)", f"{s_2pb[1]:.2f}", delta_color="off", help="跟注概率 (必胜)")
+c2.metric("P0 Card2 (Call)", f"{s_2pb[1]:.2f}", delta_color="off", help="Call rate (always wins)")
 s_1p = get_strat("1p")
 c3.metric("P1 Card1 (Check)", f"{s_1p[0]:.2f}", delta_color="off")
 s_1b = get_strat("1b")
@@ -257,7 +259,7 @@ def render_game_tree_svg(game, snapshot_data, show_payoff=True):
 
         elif state.is_chance_node():
             deal_to = "P0" if len(state.history) == 0 else "P1"
-            label = f"{deal_to} 发牌"
+            label = f"Deal to {deal_to}"
             fillcolor = "#fff1b8"
             shape = "circle"
             width = "0.8"
@@ -337,7 +339,7 @@ def render_game_tree_svg(game, snapshot_data, show_payoff=True):
                 for card in state.legal_actions():
                     next_s = state.clone()
                     next_s.apply_action(card)
-                    visit(next_s, node_id, f"{deal_to}牌值: {card}")
+                    visit(next_s, node_id, f"Card to {deal_to}: {card}")
             else:
                 actions = [0, 1]
                 names = ["Pass", "Bet"]
