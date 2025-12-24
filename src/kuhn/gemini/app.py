@@ -217,58 +217,85 @@ NASH_INFO = {
 # 绘图逻辑
 def render_game_tree_svg(game, snapshot_data, show_payoff=True):
     dot = graphviz.Digraph(comment="Kuhn Poker")
+
+    # --- Global Graph Attributes ---
+    dot.attr(bgcolor="transparent")
     dot.attr(rankdir="TB")
-    dot.attr(splines="polyline")
-    dot.attr(nodesep="0.4")
-    dot.attr(ranksep="0.8")
+    dot.attr(splines="true")  # "true" for curved lines, "ortho" for right angles
+    dot.attr(nodesep="0.6")  # Increase horizontal spacing
+    dot.attr(ranksep="0.6")  # Increase vertical spacing
+    dot.attr(fontname="Helvetica")
+
+    # --- Global Node/Edge Attributes ---
+    dot.attr("node", fontname="Helvetica", fontsize="12", penwidth="1.5")
+    dot.attr("edge", fontname="Helvetica", fontsize="10", penwidth="1.2", arrowsize="0.7")
 
     def visit(state, parent_id=None, edge_label=None):
         history_str = "".join(map(str, state.history))
         node_id = f"node_{history_str}"
 
-        # 样式设置
+        # Default Node Style
         label = ""
         fillcolor = "white"
-        shape = "ellipse"
-        fontsize = "13"
+        color = "#333333"
+        shape = "box"
+        style = "filled,rounded"
         width = "1.2"
         height = "0.8"
-        style = "filled"
         node_data = None
         tooltip = None
 
         if state.is_terminal():
             if not show_payoff:
                 label = ""
-                shape = "box"
-                fillcolor = "white"
-                width = "1.0"
-                height = "0.6"
+                shape = "point"
+                width = "0.1"
                 style = "invis"
-                fixedsize = "true"
             else:
                 returns = state.returns()
                 p0_ret = returns[0]
-                color_code = "#d9f7be" if p0_ret > 0 else "#ffa39e"
+                # Color-code payoffs
+                if p0_ret > 0:
+                    fillcolor = "#E8F5E9"  # Light Green
+                    color = "#4CAF50"
+                elif p0_ret < 0:
+                    fillcolor = "#FFEBEE"  # Light Red
+                    color = "#EF5350"
+                else:
+                    fillcolor = "#F5F5F5"
+                    color = "#9E9E9E"
+
                 label = f"Payoff\nP0: {p0_ret:+.1f}"
                 shape = "box"
-                fillcolor = color_code
-                width = "1.0"
-                height = "0.6"
-                fixedsize = "true"
+                style = "filled,rounded"
+                width = "0.9"
+                height = "0.5"
 
         elif state.is_chance_node():
+            # Chance Node: Minimalist circle
             deal_to = "P0" if len(state.history) == 0 else "P1"
-            label = f"Deal to {deal_to}"
-            fillcolor = "#fff1b8"
+            label = f"Deal\\n{deal_to}"
+            fillcolor = "#FFF9C4"  # Light Yellow
+            color = "#FBC02D"
             shape = "circle"
-            width = "0.8"
-            height = "0.8"
+            width = "0.7"
+            height = "0.7"
+            style = "filled"
 
-        else:  # 玩家节点
+        else:  # Player Node
             player = state.current_player()
             info_set = state.information_state_string()
-            fillcolor = "#bae7ff" if player == 0 else "#ffccc7"
+
+            # Player-specific themes
+            if player == 0:
+                header_bg = "#B3E5FC"  # Blue Header
+                fillcolor = "#E1F5FE"  # Light Blue Body
+                border_color = "#0277BD"  # Dark Blue Border
+            else:
+                header_bg = "#F8BBD0"  # Pink Header
+                fillcolor = "#FCE4EC"  # Light Pink Body
+                border_color = "#C2185B"  # Dark Pink Border
+
             node_data = snapshot_data.get(info_set)
 
             if node_data:
@@ -276,61 +303,81 @@ def render_game_tree_svg(game, snapshot_data, show_payoff=True):
                 regret = node_data.get("regret")
                 current_strat = node_data.get("current_strategy")
 
-                # SVG tooltip: 显示完整策略与后悔值，便于悬浮查看
+                # Build Tooltip
                 tooltip_lines = [
-                    f"avg_strategy: [{avg_strat[0]:.3f}, {avg_strat[1]:.3f}]",
+                    f"InfoSet: {info_set}",
+                    f"Avg Strat: Pass={avg_strat[0]:.1%}, Bet={avg_strat[1]:.1%}",
                 ]
-
                 nash_desc = NASH_INFO.get(info_set)
                 if nash_desc:
-                    tooltip_lines.append(nash_desc)
-
+                    tooltip_lines.append(f"Nash: {nash_desc}")
                 if regret is not None:
-                    tooltip_lines.append(f"regret: [{regret[0]:.3f}, {regret[1]:.3f}]")
+                    tooltip_lines.append(f"Regret: [{regret[0]:.3f}, {regret[1]:.3f}]")
                 if current_strat is not None:
                     tooltip_lines.append(
-                        f"current_strategy: [{current_strat[0]:.3f}, {current_strat[1]:.3f}]"
+                        f"Curr Strat: [{current_strat[0]:.3f}, {current_strat[1]:.3f}]"
                     )
                 tooltip = "\n".join(tooltip_lines)
+
+                # HTML Label Table
                 label = (
-                    f'<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">'
-                    f"<TR><TD><B>P{player} ({info_set})</B></TD></TR>"
-                    f"<TR><TD>Pass: {avg_strat[0]:.1%}</TD></TR>"
-                    f"<TR><TD>Bet:  {avg_strat[1]:.1%}</TD></TR>"
+                    f'<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="{border_color}" BGCOLOR="{fillcolor}">'
+                    f'<TR><TD BGCOLOR="{header_bg}"><B>P{player}</B> <FONT POINT-SIZE="10">({info_set})</FONT></TD></TR>'
+                    f'<TR><TD ALIGN="LEFT">Pass: <B>{avg_strat[0]:.1%}</B></TD></TR>'
+                    f'<TR><TD ALIGN="LEFT">Bet:  <B>{avg_strat[1]:.1%}</B></TD></TR>'
                     f"</TABLE>>"
                 )
+                shape = "plain"  # Let HTML table define shape
             else:
                 label = f"P{player}: {info_set}"
+                # If no data, fall back to standard box
+                color = border_color
+                style = "filled,rounded"
 
         node_kwargs = dict(
             shape=shape,
-            style=style,
-            fillcolor=fillcolor,
-            color="black",
-            penwidth="1.0",
-            fontname="Helvetica",
-            fontsize=fontsize,
+            style=style if shape != "plain" else "",
+            fillcolor=fillcolor if shape != "plain" else "",
+            color=color if shape != "plain" else "",
             width=width,
             height=height,
         )
-        if node_data and tooltip:
+        if tooltip:
             node_kwargs["tooltip"] = tooltip
-            # 设置 URL 以确保浏览器对 tooltip 生效（生成可悬浮的 <a>） -> 移除 URL，直接利用 SVG <title>
-            # node_kwargs["URL"] = "#"
-        if state.is_terminal():
-            node_kwargs["fixedsize"] = fixedsize
+
         dot.node(node_id, label, **node_kwargs)
 
         if parent_id:
-            edge_style = "invis" if (state.is_terminal() and not show_payoff) else "solid"
-            edge_label = "" if edge_style == "invis" else edge_label
+            # Edge Styling
+            edge_style_attr = "solid"
+            edge_color_attr = "#616161"
+            font_color_attr = "#424242"
+
+            if state.is_terminal() and not show_payoff:
+                edge_style_attr = "invis"
+
+            # Action-specific styling
+            if edge_label == "Pass":
+                edge_color_attr = "#1976D2"  # Blue
+                font_color_attr = "#1565C0"
+            elif edge_label == "Bet":
+                edge_color_attr = "#D32F2F"  # Red
+                font_color_attr = "#C62828"
+            elif edge_label and "Card" in edge_label:
+                edge_color_attr = "#FBC02D"  # Yellow/Orange
+                edge_style_attr = "dashed"
+                font_color_attr = "#EF6C00"
+                # Simplify label: "Card to Px: K" -> "K"
+                if ":" in edge_label:
+                    edge_label = edge_label.split(":")[1].strip()
+
             dot.edge(
                 parent_id,
                 node_id,
                 label=edge_label,
-                fontsize="14",
-                arrowsize="0.6",
-                style=edge_style,
+                color=edge_color_attr,
+                style=edge_style_attr,
+                fontcolor=font_color_attr,
             )
 
         if not state.is_terminal():
