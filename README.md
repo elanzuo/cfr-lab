@@ -31,7 +31,13 @@ uv run python src/kuhn/calculate_alpha.py --iterations 1000000 --log-every 10000
 
 默认 `--iterations=200000`，`--log-every=0`（不输出进度）。
 
-3. 启动可视化界面（Streamlit）：
+3. 运行 vanilla CFR 并输出训练日志（便于理解流程）：
+
+```bash
+uv run python src/kuhn/vanilla_cfr.py --iterations 20000 --log-every 1000 --focus 0 1 2 0b 1b 2b --show-regret --show-current
+```
+
+4. 启动可视化界面（Streamlit）：
 
 ```bash
 uv run streamlit run src/kuhn/ui_tree.py
@@ -40,7 +46,7 @@ uv run streamlit run src/kuhn/ui_tree.py
 ## 目录结构
 
 - `src/kuhn/kuhn_poker.py`：Kuhn Poker 游戏逻辑（高性能实现，带可选参数校验）
-- `src/kuhn/cfr_backend.py`：CFR 训练与快照生成
+- `src/kuhn/vanilla_cfr.py`：CFR 训练与快照生成
 - `src/kuhn/viz.py`：Graphviz 博弈树渲染与 Tooltip 生成
 - `src/kuhn/ui_tree.py`：Streamlit 可视化应用入口
 - `docs/README.md`：文档索引（规则与纳什均衡参考）

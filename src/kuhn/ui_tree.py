@@ -3,8 +3,8 @@ import time
 
 import streamlit as st
 import streamlit.components.v1 as components
-from cfr_backend import CFRSolver
 from kuhn_poker import KuhnPokerGame
+from vanilla_cfr import CFRSolver
 from viz import NASH_INFO, make_svg_responsive, render_game_tree_svg
 
 PLAY_DELAY_MS = 300

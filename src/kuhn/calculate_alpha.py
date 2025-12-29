@@ -5,7 +5,7 @@ import sys
 # 将 src/kuhn 加入路径以便导入
 sys.path.append(os.path.join(os.getcwd(), "src", "kuhn"))
 
-from cfr_backend import CFRSolver
+from vanilla_cfr import CFRSolver
 
 
 def parse_args() -> argparse.Namespace:

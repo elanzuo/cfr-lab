@@ -8,6 +8,11 @@ wheels/
 
 # Virtual environments
 .venv
+
 tmp.*
+
 .DS_Store
+
 .gemini-clipboard/
+
+.idea/

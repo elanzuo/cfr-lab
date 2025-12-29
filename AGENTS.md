@@ -46,7 +46,7 @@
     - 控制栏交互（播放/暂停/重置/切换 Payoff 视图）。
     - 关键指标仪表盘渲染（主要 InfoSet 的策略概率）。
     - `iframe` 容器管理，用于嵌入 SVG 并注入自定义 Tooltip 脚本。
-  - **依赖**：`viz.py` (绘图), `cfr_backend` (算法), `kuhn_poker` (规则)。
+  - **依赖**：`viz.py` (绘图), `vanilla_cfr` (算法), `kuhn_poker` (规则)。
 
 - **`viz.py`**: 可视化渲染模块。
   - **职责**：
@@ -57,7 +57,7 @@
     - `make_svg_responsive`: 后处理 SVG 字符串，使其适配 Web 容器并清理冗余标签。
     - `NASH_INFO`: 纳什均衡理论参考数据常量。
 
-- **`cfr_backend.py`**: CFR 算法核心实现。
+- **`vanilla_cfr.py`**: CFR 算法核心实现。
   - **职责**：执行 CFR 迭代、累积 Regret 和策略、生成训练快照。
 
 - **`kuhn_poker.py`**: Kuhn Poker 规则与状态机实现。
