@@ -1,6 +1,6 @@
-import copy
 import enum
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Union
 
 
 # --- 1. 常量与枚举定义 ---
@@ -10,8 +10,25 @@ class Action(enum.IntEnum):
 
 
 INVALID_PLAYER = -1
+CHANCE_PLAYER = -1
+TERMINAL_PLAYER = -2
 DEFAULT_PLAYERS = 2
 ANTE = 1.0
+BET_SIZE = 1.0
+
+
+@dataclass(frozen=True, slots=True)
+class KuhnConfig:
+    num_players: int = DEFAULT_PLAYERS
+    ante: float = ANTE
+    bet_size: float = BET_SIZE
+    enable_checks: bool = False
+
+    def __post_init__(self) -> None:
+        if self.num_players < 2:
+            raise ValueError("num_players 必须 >= 2")
+        if self.ante <= 0 or self.bet_size <= 0:
+            raise ValueError("ante 与 bet_size 必须为正数")
 
 
 class KuhnState:
@@ -19,8 +36,42 @@ class KuhnState:
     完全对应 OpenSpiel C++ 的 KuhnState 类
     """
 
-    def __init__(self, num_players: int):
-        self.num_players = num_players
+    __slots__ = (
+        "num_players",
+        "history",
+        "card_dealt",
+        "first_bettor",
+        "winner",
+        "pot",
+        "ante",
+        "_bet_size",
+        "_enable_checks",
+        "_config",
+        "_deck_size",
+    )
+
+    def __init__(
+        self,
+        num_players_or_config: Union[int, KuhnConfig],
+        *,
+        ante: float = ANTE,
+        bet_size: float = BET_SIZE,
+        enable_checks: bool = False,
+    ):
+        if isinstance(num_players_or_config, KuhnConfig):
+            config = num_players_or_config
+        else:
+            config = KuhnConfig(
+                num_players=num_players_or_config,
+                ante=ante,
+                bet_size=bet_size,
+                enable_checks=enable_checks,
+            )
+        self._config = config
+        self.num_players = config.num_players
+        self._deck_size = self.num_players + 1
+        self._bet_size = config.bet_size
+        self._enable_checks = config.enable_checks
 
         # history: 存储动作序列 (int)。
         # 0..N-1 为 Chance 动作(发牌)，N..End 为玩家动作
@@ -28,29 +79,29 @@ class KuhnState:
 
         # card_dealt: 索引为牌面值(0..N)，值为持有该牌的 Player ID，未发出为 -1
         # card_dealt_(game->NumPlayers() + 1, kInvalidPlayer)
-        self.card_dealt = [INVALID_PLAYER] * (num_players + 1)
+        self.card_dealt = [INVALID_PLAYER] * self._deck_size
 
         self.first_bettor = INVALID_PLAYER
         self.winner = INVALID_PLAYER
-        self.pot = ANTE * num_players
+        self.pot = config.ante * self.num_players
 
         # 记录每个玩家的投入，索引为 Player ID
-        self.ante = [ANTE] * num_players
+        self.ante = [config.ante] * self.num_players
 
     def current_player(self) -> int:
         """"""
         if self.is_terminal():
-            return -2  # Terminal Player
+            return TERMINAL_PLAYER
 
         # 历史长度小于人数，处于发牌阶段 (Chance Node)
         if len(self.history) < self.num_players:
-            return -1  # Chance Player
+            return CHANCE_PLAYER
 
         # 玩家轮流行动
         return len(self.history) % self.num_players
 
     def is_chance_node(self) -> bool:
-        return self.current_player() == -1
+        return self.current_player() == CHANCE_PLAYER
 
     def is_terminal(self) -> bool:
         """"""
@@ -58,6 +109,8 @@ class KuhnState:
 
     def apply_action(self, action: int):
         """对应 C++ 的 DoApplyAction"""
+        if self._enable_checks and self.is_terminal():
+            raise RuntimeError("终局状态不可再行动")
 
         curr_player = self.current_player()
 
@@ -66,15 +119,23 @@ class KuhnState:
             # 此时 action 代表牌面值
             # C++ 逻辑: card_dealt_[move] = history_.size()
             # history_.size() 此时正好等于接下来要拿牌的 player id
+            if self._enable_checks:
+                if not (0 <= action < self._deck_size):
+                    raise ValueError("发牌动作越界")
+                if self.card_dealt[action] != INVALID_PLAYER:
+                    raise ValueError("重复发牌")
             player_receiving_card = len(self.history)
             self.card_dealt[action] = player_receiving_card
 
         # 2. 处理 Betting
-        elif action == Action.BET:
-            if self.first_bettor == INVALID_PLAYER:
-                self.first_bettor = curr_player
-            self.pot += 1.0
-            self.ante[curr_player] += 1.0
+        else:
+            if self._enable_checks and action not in (Action.PASS, Action.BET):
+                raise ValueError("下注动作必须为 PASS(0) 或 BET(1)")
+            if action == Action.BET:
+                if self.first_bettor == INVALID_PLAYER:
+                    self.first_bettor = curr_player
+                self.pot += self._bet_size
+                self.ante[curr_player] += self._bet_size
 
         # 将动作加入历史
         self.history.append(action)
@@ -104,11 +165,11 @@ class KuhnState:
             #
             for card in range(self.num_players, -1, -1):
                 player = self.card_dealt[card]
-                if player != INVALID_PLAYER and self._did_bet(player):
+                if player != INVALID_PLAYER and self.did_bet(player):
                     self.winner = player
                     break
 
-    def _did_bet(self, player: int) -> bool:
+    def did_bet(self, player: int) -> bool:
         """
         判断玩家是否进行了下注/跟注。
 
@@ -125,6 +186,8 @@ class KuhnState:
         if player > self.first_bettor:
             # 在 first_bettor 之后的玩家，只有一轮行动机会
             idx = self.num_players + player
+            if idx >= len(self.history):
+                return False
             return self.history[idx] == Action.BET
         else:
             # 在 first_bettor 之前的玩家，必须有第二轮行动
@@ -156,9 +219,8 @@ class KuhnState:
 
         outcomes = [0.0] * self.num_players
         for p in range(self.num_players):
-            # 投入计算: 这里的 bet 指的是额外投入 (1 或 2)
-            # OpenSpiel 实现: bet = DidBet(player) ? 2 : 1
-            bet = 2.0 if self._did_bet(p) else 1.0
+            # 投入计算: ante 记录了玩家实际投入，能自然兼容不同 bet_size
+            bet = float(self.ante[p])
 
             if p == self.winner:
                 outcomes[p] = self.pot - bet
@@ -166,15 +228,18 @@ class KuhnState:
                 outcomes[p] = -bet
         return outcomes
 
-    def information_state_string(self) -> str:
+    def information_state_string(self, player: Optional[int] = None) -> str:
         """
         完全对齐 C++ 的字符串表示，用于 CFR 查表
         格式: {Card}{History}，例如 "0pb"
 
         """
-        player = self.current_player()
+        if player is None:
+            player = self.current_player()
         if player < 0:
             return "Chance"
+        if self._enable_checks and player >= self.num_players:
+            raise ValueError("player 越界")
 
         result = ""
         # 1. 私有牌 (Private Card)
@@ -194,13 +259,15 @@ class KuhnState:
 
     def chance_outcomes(self) -> List[Tuple[int, float]]:
         """"""
+        if self._enable_checks and not self.is_chance_node():
+            raise RuntimeError("当前不是 Chance 节点")
         actions = self.legal_actions()
         prob = 1.0 / len(actions)
         return [(a, prob) for a in actions]
 
     def clone(self):
         """深拷贝状态，用于搜索"""
-        new_state = KuhnState(self.num_players)
+        new_state = KuhnState(self._config)
         new_state.history = self.history[:]
         new_state.card_dealt = self.card_dealt[:]
         new_state.first_bettor = self.first_bettor
@@ -212,8 +279,21 @@ class KuhnState:
 
 # --- 游戏入口类 ---
 class KuhnPokerGame:
-    def __init__(self, num_players=DEFAULT_PLAYERS):
-        self.num_players = num_players
+    def __init__(
+        self,
+        num_players: int = DEFAULT_PLAYERS,
+        *,
+        ante: float = ANTE,
+        bet_size: float = BET_SIZE,
+        enable_checks: bool = False,
+    ):
+        self.config = KuhnConfig(
+            num_players=num_players,
+            ante=ante,
+            bet_size=bet_size,
+            enable_checks=enable_checks,
+        )
+        self.num_players = self.config.num_players
 
     def new_initial_state(self) -> KuhnState:
-        return KuhnState(self.num_players)
+        return KuhnState(self.config)

@@ -1,7 +1,7 @@
 [project]
 name = "cfr-lab"
 version = "0.1.0"
-description = "Add your description here"
+description = "Kuhn Poker 的 CFR 训练与可视化工具"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.13"
@@ -62,7 +62,6 @@ ignore = [
 
 [tool.ruff.lint.isort]
 # 导入排序宽松配置
-known-first-party = ["leduc", "happyfive"]
 split-on-trailing-comma = false
 force-single-line = false
 
