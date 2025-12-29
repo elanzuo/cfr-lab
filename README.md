@@ -19,7 +19,7 @@ uv run src/train_kuhn.py --iterations 5000 --checkpoint-every 500
 3. Launch the UI:
 
 ```bash
-uv run streamlit run src/Kuhn/gemini/app.py
+uv run streamlit run src/Kuhn/app.py
 ```
 
 The UI reads `artifacts/kuhn_cfr.json` by default. Use the sidebar to select a checkpoint and switch between average/current strategies.
@@ -27,3 +27,7 @@ The UI reads `artifacts/kuhn_cfr.json` by default. Use the sidebar to select a c
 ## Notes
 
 - The Python `graphviz` package relies on the Graphviz system binary (`dot`). Install it if you see rendering errors.
+
+## License
+
+MIT License
