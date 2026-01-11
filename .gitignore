@@ -16,3 +16,6 @@ tmp.*
 .gemini-clipboard/
 
 .idea/
+
+# jupyter notebooks
+.ipynb_checkpoints

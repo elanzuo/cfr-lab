@@ -4,5 +4,5 @@
 
 ## 目录说明
 
-- `docs/kuhn/kuhn-rule.md`：Kuhn Poker 规则（对齐 OpenSpiel）
+- `docs/kuhn/kuhn-rule-2p.md`：Kuhn Poker 规则（对齐 OpenSpiel，2 人版本）
 - `docs/kuhn/kuhn-nash.md`：Kuhn Poker 纳什均衡参考与验证要点
